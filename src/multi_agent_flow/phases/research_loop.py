@@ -8,7 +8,7 @@ from ..config import AppConfig
 from ..inputs import normalize_input
 from ..prompts import render_prompt
 from ..state import create_task, load_task, read_text, save_task, task_dir, write_text
-from .common import persist_agent_result
+from .common import persist_agent_result, sanitize_agent_output
 
 
 def _build_adapters(config: AppConfig) -> dict[str, object]:
@@ -104,12 +104,13 @@ def _run_iteration(
             stem, focus = future_map[future]
             result = future.result()
             persist_agent_result(iter_dir, stem, result)
+            clean_output = sanitize_agent_output(result.stdout)
             summaries.append(
                 f"## {stem}\n"
                 f"- focus: {focus}\n"
                 f"- exit_code: {result.exit_code}\n"
                 f"- timed_out: {result.timed_out}\n\n"
-                f"{result.stdout.strip()}\n"
+                f"{clean_output}\n"
             )
 
     if previous_synthesis:
@@ -137,8 +138,9 @@ def _run_iteration(
         "synthesis",
     )
     persist_agent_result(iter_dir, "synthesis", synthesis)
-    write_text(iter_dir / "synthesis.md", synthesis.stdout)
-    return synthesis.stdout
+    clean_synthesis = sanitize_agent_output(synthesis.stdout)
+    write_text(iter_dir / "synthesis.md", clean_synthesis)
+    return clean_synthesis
 
 
 def _run_final_consolidation(
@@ -174,8 +176,9 @@ def _run_final_consolidation(
         "consolidation",
     )
     persist_agent_result(final_dir, "consolidation", result)
-    write_text(final_dir / "consolidation.md", result.stdout)
-    return result.stdout
+    clean_output = sanitize_agent_output(result.stdout)
+    write_text(final_dir / "consolidation.md", clean_output)
+    return clean_output
 
 
 def run_research_loop(

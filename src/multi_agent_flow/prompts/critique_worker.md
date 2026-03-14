@@ -18,3 +18,5 @@ Produce a concise research-critique memo with these sections:
 
 Do not repeat findings from prior iterations unless you are deepening or challenging them.
 If you cite external facts, name the source or say that it still needs verification.
+
+IMPORTANT: Output ONLY valid markdown. Do not emit tool calls, XML tags, JSON tool invocations, or any non-markdown content. Do not attempt to read files or use tools. Your entire response must be a single markdown document.
