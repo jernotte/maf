@@ -60,10 +60,10 @@ Patch `.maf.yml` when adapting the workflow to a particular project. Patch `src/
 
 ## Claude Counterpart
 
-The matching Claude wrapper templates live here:
+The matching Claude scaffolds live here (bundled in the package and written by `maf init`):
 
-- `templates/claude/CLAUDE.md.example`
-- `templates/claude/references/multi-agent-flow.md`
+- `src/multi_agent_flow/scaffolds/claude/CLAUDE.md`
+- `src/multi_agent_flow/scaffolds/claude/commands/`
 
-Use those templates when a project also wants Claude-specific operating instructions around the same `maf` baseline.
+Run `maf --project-root <project-root> init` to write these into a project alongside the Codex skill.
 
