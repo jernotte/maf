@@ -1,0 +1,9 @@
+.maf/
+.pdf_pages/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/

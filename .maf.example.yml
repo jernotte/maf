@@ -1,0 +1,39 @@
+maf_dir: .maf
+default_validation_profile: default
+
+agents:
+  claude:
+    command:
+      - claude
+      - -p
+      - --tools
+      - ""
+      - --no-session-persistence
+    timeout_s: 1800
+  codex:
+    command:
+      - codex
+      - exec
+      - --skip-git-repo-check
+      - "-"
+    timeout_s: 1800
+  gemini:
+    command:
+      - gemini
+      - -p
+      - ""
+    timeout_s: 1800
+
+research:
+  worker_focuses:
+    - architecture
+    - domain-model
+    - risks-and-edge-cases
+  max_workers: 3
+
+validation_profiles:
+  default:
+    commands:
+      - pytest
+      - npm test
+

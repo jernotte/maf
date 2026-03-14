@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multi-Agent Flow"
+  short_description: "Drive the shared maf workflow"
+  default_prompt: "Use $multi-agent-flow to run this project through the shared `maf` research/spec/build/review/finalize flow."
