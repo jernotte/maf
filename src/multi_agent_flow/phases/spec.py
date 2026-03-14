@@ -15,7 +15,44 @@ from ..state import (
     task_dir,
     write_text,
 )
-from .common import persist_agent_result, require_file
+from .common import persist_agent_result, require_file, sanitize_agent_output
+
+
+def run_spec_direct(
+    project_root: str,
+    config: AppConfig,
+    title: str,
+    input_path: str,
+) -> tuple[str, Path]:
+    """Create a task from raw input and generate a spec directly — no normalization, no research."""
+    from ..state import create_task
+
+    input_file = Path(input_path).expanduser().resolve()
+    if input_file.exists():
+        raw_content = read_text(input_file)
+        source_type = "direct-file"
+    else:
+        raw_content = input_path
+        source_type = "direct-inline"
+
+    task = create_task(
+        project_root=project_root,
+        config=config,
+        title=title,
+        input_value=input_path,
+        source_type=source_type,
+        validation_profile=None,
+    )
+    base_dir = task_dir(project_root, config, task.task_id)
+    # Write the raw input as the brief — no normalization
+    write_text(base_dir / "normalized-brief.md", raw_content)
+    task.status = "researched"
+    task.metadata["normalized_brief_path"] = "normalized-brief.md"
+    save_task(project_root, config, task)
+
+    # Now run spec generation
+    spec_path = run_spec(project_root, config, task.task_id)
+    return task.task_id, spec_path
 
 
 def run_spec(project_root: str, config: AppConfig, task_id: str) -> Path:
@@ -34,8 +71,9 @@ def run_spec(project_root: str, config: AppConfig, task_id: str) -> Path:
     adapter = ClaudeAdapter(config.agents["claude"])
     result = adapter.run(prompt, project_root, base_dir, "spec", "draft")
     persist_agent_result(base_dir / "spec", "draft", result)
+    clean_output = sanitize_agent_output(result.stdout)
     destination = draft_spec_path(project_root, config, task_id)
-    write_text(destination, result.stdout)
+    write_text(destination, clean_output)
 
     task.status = "spec-drafted"
     task.metadata["spec_draft_path"] = "spec/spec-draft.md"

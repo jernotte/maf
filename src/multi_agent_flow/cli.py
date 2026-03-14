@@ -9,6 +9,7 @@ from typing import Iterator
 from .config import load_project_config
 from .phases import approve_spec, run_build, run_finalize, run_research, run_research_loop, run_review, run_spec
 from .phases.research_loop import resume_research_loop
+from .phases.spec import run_spec_direct
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +61,13 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Iteration to resume from (requires --resume-task). Prior iterations are loaded from disk.",
     )
+
+    spec_direct = subparsers.add_parser(
+        "spec-direct",
+        help="Create a task from raw input and generate a spec directly — no research phase.",
+    )
+    spec_direct.add_argument("--input", required=True, help="Path to a design doc or inline text. Used as-is, not normalized.")
+    spec_direct.add_argument("--title", required=True, help="Short task title.")
 
     spec = subparsers.add_parser("spec", help="Generate a spec draft for an existing task.")
     spec.add_argument("--task", required=True, help="Task ID.")
@@ -165,6 +173,17 @@ def main(argv: list[str] | None = None) -> int:
                 iterations=args.iterations,
             )
         print(task_id)
+        return 0
+
+    if args.command == "spec-direct":
+        task_id, path = run_spec_direct(
+            project_root=str(project_root),
+            config=config,
+            title=args.title,
+            input_path=args.input,
+        )
+        print(f"{task_id}")
+        print(f"{path}")
         return 0
 
     if args.command == "spec":
