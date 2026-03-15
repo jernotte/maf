@@ -14,6 +14,8 @@ agents:
     command:
       - claude
       - -p
+      - --allowedTools
+      - "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch"
       - --no-session-persistence
     timeout_s: 3600
   codex:
@@ -39,7 +41,5 @@ research:
 
 validation_profiles:
   default:
-    commands:
-      - pytest
-      - npm test
+    commands: []
 

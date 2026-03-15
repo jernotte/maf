@@ -5,6 +5,7 @@ import subprocess
 import time
 
 from ..models import ValidationCommandResult, ValidationRunResult
+from ..progress import log
 
 
 def run_validation(
@@ -17,6 +18,7 @@ def run_validation(
     root = Path(project_root).resolve()
 
     for command in commands:
+        log("validate", f"{command}")
         started = time.monotonic()
         completed = subprocess.run(
             command,
@@ -27,6 +29,8 @@ def run_validation(
             check=False,
         )
         duration = time.monotonic() - started
+        status = "ok" if completed.returncode == 0 else f"exit {completed.returncode}"
+        log("validate", f"{command} → {status}")
         item = ValidationCommandResult(
             command=command,
             exit_code=completed.returncode,

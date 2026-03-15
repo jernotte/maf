@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..agents import CodexAdapter, GeminiAdapter
 from ..config import AppConfig
+from ..progress import agent_done, agent_start, log
 from ..prompts import render_prompt
 from ..state import approved_spec_path, load_task, read_text, save_task, task_dir, write_json
 from .common import coerce_json_output, persist_agent_result, require_file
@@ -24,6 +25,7 @@ def run_review(project_root: str, config: AppConfig, task_id: str) -> Path:
     implementation_log = read_text(build_log_path)
     changed_files = read_text(changed_files_path) if changed_files_path.exists() else '{"changed_files": []}'
 
+    log("review", "Rendering prompt...")
     prompt = render_prompt(
         "review.md",
         title=task.title,
@@ -38,6 +40,11 @@ def run_review(project_root: str, config: AppConfig, task_id: str) -> Path:
         ("codex", CodexAdapter(config.agents["codex"])),
     ]
 
+    log("review", "Starting independent reviews...")
+    for name, _ in jobs:
+        agent_start("review", name)
+
+    completed_count = 0
     with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
         future_map = {
             executor.submit(adapter.run, prompt, project_root, base_dir, "review", name): name
@@ -46,6 +53,8 @@ def run_review(project_root: str, config: AppConfig, task_id: str) -> Path:
         for future in as_completed(future_map):
             name = future_map[future]
             result = future.result()
+            completed_count += 1
+            agent_done("review", name, result.duration_s, last=completed_count == len(jobs))
             persist_agent_result(review_dir, name, result)
             write_json(review_dir / f"{name}-review.json", coerce_json_output(result.stdout))
 
@@ -53,5 +62,6 @@ def run_review(project_root: str, config: AppConfig, task_id: str) -> Path:
     task.metadata["gemini_review_path"] = "review/gemini-review.json"
     task.metadata["codex_review_path"] = "review/codex-review.json"
     save_task(project_root, config, task)
+    log("review", "Done → review/")
     return review_dir
 

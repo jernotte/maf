@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ..agents import ClaudeAdapter
 from ..config import AppConfig
+from ..progress import agent_done, agent_start, log
 from ..prompts import render_prompt
 from ..state import (
     approved_spec_path,
@@ -62,6 +63,7 @@ def run_spec(project_root: str, config: AppConfig, task_id: str) -> Path:
     research_summary_path = base_dir / "research" / "synthesis.md"
     research_summary = read_text(research_summary_path) if research_summary_path.exists() else ""
 
+    log("spec", "Rendering prompt...")
     prompt = render_prompt(
         "spec.md",
         title=task.title,
@@ -69,7 +71,9 @@ def run_spec(project_root: str, config: AppConfig, task_id: str) -> Path:
         research_summary=research_summary,
     )
     adapter = ClaudeAdapter(config.agents["claude"])
+    agent_start("spec", "claude")
     result = adapter.run(prompt, project_root, base_dir, "spec", "draft")
+    agent_done("spec", "claude", result.duration_s, last=True)
     persist_agent_result(base_dir / "spec", "draft", result)
     clean_output = sanitize_agent_output(result.stdout)
     destination = draft_spec_path(project_root, config, task_id)
@@ -78,6 +82,7 @@ def run_spec(project_root: str, config: AppConfig, task_id: str) -> Path:
     task.status = "spec-drafted"
     task.metadata["spec_draft_path"] = "spec/spec-draft.md"
     save_task(project_root, config, task)
+    log("spec", "Done → spec/spec-draft.md")
     return destination
 
 

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ..agents import ClaudeAdapter
 from ..config import AppConfig
+from ..progress import agent_done, agent_start, log
 from ..prompts import render_prompt
 from ..state import approved_spec_path, load_task, read_text, save_task, task_dir, write_json, write_text
 from ..validation import run_validation
@@ -26,6 +27,7 @@ def run_finalize(project_root: str, config: AppConfig, task_id: str) -> Path:
     codex_payload = read_text(codex_review)
     validation_commands = config.resolve_validation_commands(task.validation_profile)
 
+    log("finalize", "Rendering prompt...")
     prompt = render_prompt(
         "finalize.md",
         title=task.title,
@@ -37,18 +39,23 @@ def run_finalize(project_root: str, config: AppConfig, task_id: str) -> Path:
     )
 
     adapter = ClaudeAdapter(config.agents["claude-build"])
+    agent_start("finalize", "claude-build")
     result = adapter.run(prompt, project_root, base_dir, "finalize", "summary")
+    agent_done("finalize", "claude-build", result.duration_s, last=True)
     finalize_dir = base_dir / "finalize"
     persist_agent_result(finalize_dir, "summary", result)
     write_text(finalize_dir / "final-summary.md", result.stdout)
     write_json(finalize_dir / "disposition.json", coerce_json_output(result.stdout))
 
+    log("finalize", "Running validation...")
     validation = run_validation(project_root, validation_commands, task.validation_profile)
     write_json(finalize_dir / "validation.json", validation.to_dict())
+    log("finalize", f"Validation {'passed' if validation.success else 'failed'}")
 
     task.status = "finalized"
     task.metadata["final_summary_path"] = "finalize/final-summary.md"
     task.metadata["final_validation_path"] = "finalize/validation.json"
     save_task(project_root, config, task)
+    log("finalize", "Done → finalize/final-summary.md")
     return finalize_dir / "final-summary.md"
 

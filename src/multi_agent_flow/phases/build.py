@@ -5,6 +5,7 @@ from pathlib import Path
 from ..agents import ClaudeAdapter
 from ..config import AppConfig
 from ..git import diff_changed_files, snapshot_changed_files
+from ..progress import agent_done, agent_start, log
 from ..prompts import render_prompt
 from ..state import approved_spec_path, load_task, read_text, save_task, task_dir, write_json, write_text
 from ..validation import run_validation
@@ -26,6 +27,7 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
     brief_path = base_dir / "normalized-brief.md"
     source_brief = read_text(brief_path) if brief_path.exists() else ""
 
+    log("build", "Rendering prompt...")
     prompt = render_prompt(
         "build.md",
         title=task.title,
@@ -37,7 +39,9 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
 
     before = snapshot_changed_files(project_root)
     adapter = ClaudeAdapter(config.agents["claude-build"])
+    agent_start("build", "claude-build")
     result = adapter.run(prompt, project_root, base_dir, "build", "implementation")
+    agent_done("build", "claude-build", result.duration_s, last=True)
     persist_agent_result(base_dir / "build", "implementation", result)
     clean_output = sanitize_agent_output(result.stdout)
     write_text(base_dir / "build" / "implementation-log.md", clean_output)
@@ -46,13 +50,16 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
     changed_files = diff_changed_files(before, after)
     write_json(base_dir / "build" / "changed-files.json", {"changed_files": changed_files})
 
+    log("build", "Running validation...")
     validation = run_validation(project_root, validation_commands, task.validation_profile)
     write_json(base_dir / "build" / "validation.json", validation.to_dict())
+    log("build", f"Validation {'passed' if validation.success else 'failed'}")
 
     task.status = "built"
     task.metadata["build_log_path"] = "build/implementation-log.md"
     task.metadata["changed_files_path"] = "build/changed-files.json"
     task.metadata["validation_path"] = "build/validation.json"
     save_task(project_root, config, task)
+    log("build", f"Done → build/implementation-log.md")
     return base_dir / "build" / "implementation-log.md"
 

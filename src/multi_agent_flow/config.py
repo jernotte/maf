@@ -57,7 +57,7 @@ def _normalize_command(raw: str | list[str] | None, fallback_binary: str) -> lis
 
 
 _AGENT_DEFAULTS: dict[str, tuple[list[str], int]] = {
-    "claude-build": (["claude", "-p", "--no-session-persistence"], 3600),
+    "claude-build": (["claude", "-p", "--allowedTools", "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", "--no-session-persistence"], 3600),
 }
 
 

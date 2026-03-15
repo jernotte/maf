@@ -110,6 +110,16 @@ def _write_scaffold(project_root: Path, dot_dir: str, scaffold_name: str, force:
     return written
 
 
+def _detect_validation_commands(project_root: Path) -> list[str]:
+    """Auto-detect validation commands based on project language markers."""
+    commands: list[str] = []
+    if any((project_root / f).exists() for f in ("pyproject.toml", "setup.py", "setup.cfg")):
+        commands.append("pytest")
+    if (project_root / "package.json").exists():
+        commands.append("npm test")
+    return commands
+
+
 def _init_config(project_root: Path, force: bool, skip_scaffolds: bool = False) -> list[Path]:
     written: list[Path] = []
 
@@ -118,6 +128,16 @@ def _init_config(project_root: Path, force: bool, skip_scaffolds: bool = False) 
         raise FileExistsError(f"{destination} already exists. Use --force to overwrite it.")
     sample = files("multi_agent_flow").joinpath("default_maf.yml").read_text(encoding="utf-8")
     destination.write_text(sample, encoding="utf-8")
+
+    # Patch validation commands based on detected project language
+    detected = _detect_validation_commands(project_root)
+    if detected:
+        import yaml
+
+        config_data = yaml.safe_load(destination.read_text(encoding="utf-8"))
+        config_data.setdefault("validation_profiles", {}).setdefault("default", {})["commands"] = detected
+        destination.write_text(yaml.dump(config_data, default_flow_style=False, sort_keys=False), encoding="utf-8")
+
     written.append(destination)
 
     if not skip_scaffolds:

@@ -6,6 +6,7 @@ from pathlib import Path
 from ..agents import ClaudeAdapter, CodexAdapter, GeminiAdapter
 from ..config import AppConfig
 from ..inputs import normalize_input
+from ..progress import agent_done, agent_start, log
 from ..prompts import render_prompt
 from ..state import create_task, load_task, read_text, save_task, task_dir, write_text
 from .common import persist_agent_result, sanitize_agent_output
@@ -87,7 +88,12 @@ def _run_iteration(
         ),
     ))
 
+    phase = f"research:{iteration}/{total_iterations}"
+    for stem, focus, _adapter, _prompt in jobs:
+        agent_start(phase, stem, label=focus)
+
     summaries: list[str] = []
+    completed_count = 0
     with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
         future_map = {
             executor.submit(
@@ -103,6 +109,8 @@ def _run_iteration(
         for future in as_completed(future_map):
             stem, focus = future_map[future]
             result = future.result()
+            completed_count += 1
+            agent_done(phase, stem, result.duration_s, label=focus, last=completed_count == len(jobs))
             persist_agent_result(iter_dir, stem, result)
             clean_output = sanitize_agent_output(result.stdout)
             summaries.append(
@@ -130,6 +138,7 @@ def _run_iteration(
         total_iterations=str(total_iterations),
         previous_synthesis_context=previous_synthesis_context,
     )
+    agent_start(phase, "claude", label="synthesis")
     synthesis = adapters["claude"].run(
         synthesis_prompt,
         project_root,
@@ -137,6 +146,7 @@ def _run_iteration(
         f"research-loop-{iteration:03d}",
         "synthesis",
     )
+    agent_done(phase, "claude", synthesis.duration_s, label="synthesis", last=True)
     persist_agent_result(iter_dir, "synthesis", synthesis)
     clean_synthesis = sanitize_agent_output(synthesis.stdout)
     write_text(iter_dir / "synthesis.md", clean_synthesis)
@@ -213,7 +223,7 @@ def run_research_loop(
     previous_synthesis = ""
     all_syntheses: list[str] = []
     for iteration in range(1, iterations + 1):
-        print(f"[maf] iteration {iteration}/{iterations}", flush=True)
+        log("research-loop", f"Iteration {iteration}/{iterations}")
         previous_synthesis = _run_iteration(
             iteration=iteration,
             total_iterations=iterations,
@@ -228,7 +238,7 @@ def run_research_loop(
         all_syntheses.append(previous_synthesis)
 
     # Final consolidation pass
-    print("[maf] final consolidation", flush=True)
+    log("research-loop", "Final consolidation...")
     final_output = _run_final_consolidation(
         title=task.title,
         normalized_brief=normalized.normalized_brief,
@@ -284,11 +294,11 @@ def resume_research_loop(
         synthesis_text = read_text(synth_path)
         all_syntheses.append(synthesis_text)
         previous_synthesis = synthesis_text
-        print(f"[maf] loaded iteration {i}/{iterations} from disk ({len(synthesis_text)} bytes)", flush=True)
+        log("research-loop", f"Loaded iteration {i}/{iterations} from disk")
 
     # Run remaining iterations
     for iteration in range(start_iteration, iterations + 1):
-        print(f"[maf] iteration {iteration}/{iterations}", flush=True)
+        log("research-loop", f"Iteration {iteration}/{iterations}")
         previous_synthesis = _run_iteration(
             iteration=iteration,
             total_iterations=iterations,
@@ -303,7 +313,7 @@ def resume_research_loop(
         all_syntheses.append(previous_synthesis)
 
     # Final consolidation pass
-    print("[maf] final consolidation", flush=True)
+    log("research-loop", "Final consolidation...")
     final_output = _run_final_consolidation(
         title=task.title,
         normalized_brief=normalized_brief,
