@@ -106,10 +106,18 @@ def coerce_json_output(raw_text: str) -> dict:
     try:
         return json.loads(raw_text)
     except json.JSONDecodeError:
-        return {
-            "parse_error": "Agent output was not valid JSON.",
-            "raw_output": raw_text,
-        }
+        pass
+    # Try extracting JSON from markdown code fences
+    match = re.search(r"```(?:json)?\s*\n(.*?)\n```", raw_text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(1))
+        except json.JSONDecodeError:
+            pass
+    return {
+        "parse_error": "Agent output was not valid JSON.",
+        "raw_output": raw_text,
+    }
 
 
 def require_file(path: Path, message: str) -> None:
