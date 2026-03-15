@@ -145,7 +145,7 @@ To swap an agent's model, change the command. To disable an agent entirely, remo
 Controls the parallel research phase.
 
 - **worker_focuses** — each entry spawns a separate Claude research worker with that focus area as its lens. Add more focuses for broader coverage, remove for faster/cheaper runs. Examples: `architecture`, `domain-model`, `risks-and-edge-cases`, `feasibility`, `gaps-and-missing-requirements`, `security`.
-- **max_workers** — caps how many focuses run in parallel. If `worker_focuses` has 8 entries but `max_workers` is 3, only the first 3 run. Gemini and Codex always run one broad-research worker each, regardless of this setting.
+- **max_workers** — limits how many Claude research workers run in parallel. All focuses run, but only N at a time. If the list has 8 entries and `max_workers` is 3, all 8 run in batches of 3. Gemini and Codex always run one broad-research worker each on top of this.
 
 ### validation_profiles
 

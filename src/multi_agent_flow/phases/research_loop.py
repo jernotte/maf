@@ -27,6 +27,7 @@ def _run_iteration(
     normalized_brief: str,
     previous_synthesis: str,
     worker_focuses: list[str],
+    concurrency: int,
     adapters: dict[str, object],
     project_root: str,
     base_dir: Path,
@@ -94,7 +95,7 @@ def _run_iteration(
 
     summaries: list[str] = []
     completed_count = 0
-    with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
         future_map = {
             executor.submit(
                 adapter.run,
@@ -213,10 +214,7 @@ def run_research_loop(
     write_text(base_dir / "normalized-brief.md", normalized.normalized_brief)
 
     worker_focuses = config.research.worker_focuses[:]
-    if max_research_workers is not None:
-        worker_focuses = worker_focuses[:max_research_workers]
-    else:
-        worker_focuses = worker_focuses[: config.research.max_workers]
+    concurrency = max_research_workers or config.research.max_workers
 
     adapters = _build_adapters(config)
 
@@ -231,6 +229,7 @@ def run_research_loop(
             normalized_brief=normalized.normalized_brief,
             previous_synthesis=previous_synthesis,
             worker_focuses=worker_focuses,
+            concurrency=concurrency,
             adapters=adapters,
             project_root=project_root,
             base_dir=base_dir,
@@ -274,10 +273,7 @@ def resume_research_loop(
     normalized_brief = read_text(base_dir / "normalized-brief.md")
 
     worker_focuses = config.research.worker_focuses[:]
-    if max_research_workers is not None:
-        worker_focuses = worker_focuses[:max_research_workers]
-    else:
-        worker_focuses = worker_focuses[: config.research.max_workers]
+    concurrency = max_research_workers or config.research.max_workers
 
     adapters = _build_adapters(config)
 
@@ -306,6 +302,7 @@ def resume_research_loop(
             normalized_brief=normalized_brief,
             previous_synthesis=previous_synthesis,
             worker_focuses=worker_focuses,
+            concurrency=concurrency,
             adapters=adapters,
             project_root=project_root,
             base_dir=base_dir,

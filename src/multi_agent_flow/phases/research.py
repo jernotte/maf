@@ -41,10 +41,7 @@ def run_research(
     write_text(base_dir / "normalized-brief.md", normalized.normalized_brief)
 
     worker_focuses = config.research.worker_focuses[:]
-    if max_research_workers is not None:
-        worker_focuses = worker_focuses[:max_research_workers]
-    else:
-        worker_focuses = worker_focuses[: config.research.max_workers]
+    concurrency = max_research_workers or config.research.max_workers
 
     adapters = _build_adapters(config)
     jobs: list[tuple[str, str, object, str]] = []
@@ -97,7 +94,7 @@ def run_research(
         agent_start("research", stem, label=focus)
 
     completed_count = 0
-    with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
         future_map = {
             executor.submit(
                 adapter.run,
