@@ -8,7 +8,7 @@ from ..git import diff_changed_files, snapshot_changed_files
 from ..prompts import render_prompt
 from ..state import approved_spec_path, load_task, read_text, save_task, task_dir, write_json, write_text
 from ..validation import run_validation
-from .common import persist_agent_result, require_file
+from .common import persist_agent_result, require_file, sanitize_agent_output
 
 
 def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
@@ -22,19 +22,25 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
     approved_spec = read_text(spec_path)
     validation_commands = config.resolve_validation_commands(task.validation_profile)
 
+    # Load the original source brief for reference content
+    brief_path = base_dir / "normalized-brief.md"
+    source_brief = read_text(brief_path) if brief_path.exists() else ""
+
     prompt = render_prompt(
         "build.md",
         title=task.title,
         approved_spec=approved_spec,
+        source_brief=source_brief,
         validation_commands="\n".join(f"- {command}" for command in validation_commands)
         or "- No validation commands configured.",
     )
 
     before = snapshot_changed_files(project_root)
-    adapter = ClaudeAdapter(config.agents["claude"])
+    adapter = ClaudeAdapter(config.agents["claude-build"])
     result = adapter.run(prompt, project_root, base_dir, "build", "implementation")
     persist_agent_result(base_dir / "build", "implementation", result)
-    write_text(base_dir / "build" / "implementation-log.md", result.stdout)
+    clean_output = sanitize_agent_output(result.stdout)
+    write_text(base_dir / "build" / "implementation-log.md", clean_output)
 
     after = snapshot_changed_files(project_root)
     changed_files = diff_changed_files(before, after)

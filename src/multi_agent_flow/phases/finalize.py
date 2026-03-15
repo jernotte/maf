@@ -36,7 +36,7 @@ def run_finalize(project_root: str, config: AppConfig, task_id: str) -> Path:
         or "- No validation commands configured.",
     )
 
-    adapter = ClaudeAdapter(config.agents["claude"])
+    adapter = ClaudeAdapter(config.agents["claude-build"])
     result = adapter.run(prompt, project_root, base_dir, "finalize", "summary")
     finalize_dir = base_dir / "finalize"
     persist_agent_result(finalize_dir, "summary", result)

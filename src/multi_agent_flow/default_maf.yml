@@ -10,6 +10,12 @@ agents:
       - ""
       - --no-session-persistence
     timeout_s: 1800
+  claude-build:
+    command:
+      - claude
+      - -p
+      - --no-session-persistence
+    timeout_s: 3600
   codex:
     command:
       - codex

@@ -56,16 +56,28 @@ def _normalize_command(raw: str | list[str] | None, fallback_binary: str) -> lis
     return [str(part) for part in raw]
 
 
+_AGENT_DEFAULTS: dict[str, tuple[list[str], int]] = {
+    "claude-build": (["claude", "-p", "--no-session-persistence"], 3600),
+}
+
+
 def _load_agent_configs(raw: dict | None) -> dict[str, AgentConfig]:
-    agent_names = ("claude", "codex", "gemini")
+    agent_names = ("claude", "claude-build", "codex", "gemini")
     configs: dict[str, AgentConfig] = {}
     raw = raw or {}
     for name in agent_names:
         agent_data = raw.get(name, {})
+        default_cmd, default_timeout = _AGENT_DEFAULTS.get(name, (None, 1800))
+        if agent_data.get("command") is not None:
+            command = _normalize_command(agent_data["command"], name)
+        elif default_cmd is not None:
+            command = list(default_cmd)
+        else:
+            command = _normalize_command(None, name)
         configs[name] = AgentConfig(
             name=name,
-            command=_normalize_command(agent_data.get("command"), name),
-            timeout_s=int(agent_data.get("timeout_s", 1800)),
+            command=command,
+            timeout_s=int(agent_data.get("timeout_s", default_timeout)),
         )
     return configs
 
