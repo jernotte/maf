@@ -105,7 +105,7 @@ Each iteration builds on the previous synthesis. A final consolidation pass prod
 ```yaml
 agents:
   claude:
-    command: [claude, -p, --tools, "", --no-session-persistence]
+    command: [claude, -p, --allowedTools, "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", --no-session-persistence]
     timeout_s: 1800
   claude-build:
     command: [claude, -p, --allowedTools, "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", --no-session-persistence]
@@ -133,7 +133,7 @@ validation_profiles:
 
 Each agent entry defines how maf invokes an external AI CLI. The `command` list is the exact argv passed to `subprocess.run` — the phase prompt is piped to stdin. `timeout_s` is the maximum wall-clock time before the agent is killed.
 
-- **claude** — used for research workers and spec generation. `--tools ""` disables all tools since these phases only need text output, not file access.
+- **claude** — used for research workers and spec generation. `--allowedTools` pre-approves file and web tools so research workers can read the codebase and look things up.
 - **claude-build** — used for build and finalize. `--allowedTools` pre-approves file and shell tools so the agent can write code without interactive permission prompts. Add or remove tools here to control what the build agent can do.
 - **codex** — used for research and review. Runs in exec mode with stdin prompt.
 - **gemini** — used for research and review. Runs in prompt mode.

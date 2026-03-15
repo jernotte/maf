@@ -6,8 +6,8 @@ agents:
     command:
       - claude
       - -p
-      - --tools
-      - ""
+      - --allowedTools
+      - "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch"
       - --no-session-persistence
     timeout_s: 1800
   claude-build:
