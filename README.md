@@ -62,7 +62,7 @@ No build can start without explicit approval.
 maf --project-root . build --task <task-id>
 ```
 
-Claude implements against the approved spec. Changed files are tracked and validation commands from `.maf.yml` run automatically.
+Claude implements against the approved spec with pre-approved tool access. Changed files are tracked and validation commands from `.maf.yml` run automatically.
 
 ### 6. Review
 
@@ -99,6 +99,9 @@ agents:
   claude:
     command: [claude, -p, --tools, "", --no-session-persistence]
     timeout_s: 1800
+  claude-build:
+    command: [claude, -p, --allowedTools, "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", --no-session-persistence]
+    timeout_s: 3600
   codex:
     command: [codex, exec, --skip-git-repo-check, "-"]
     timeout_s: 1800
@@ -115,10 +118,10 @@ research:
 
 validation_profiles:
   default:
-    commands:
-      - pytest
-      - npm test
+    commands: []  # auto-detected by maf init (pytest, npm test, etc.)
 ```
+
+`maf init` auto-detects your project language and sets validation commands accordingly (`pyproject.toml` → `pytest`, `package.json` → `npm test`).
 
 ## Artifacts
 
@@ -156,6 +159,26 @@ finalize/
 - `/maf-flow` — run the full flow end-to-end
 - `/maf-research-loop` — iterative research-critique loop
 - `/maf-status` — show task status
+
+## Progress feedback
+
+All phases emit progress to stderr so you can see what's happening during long runs:
+
+```
+[build] Rendering prompt...
+[build] ├ claude-build                        running...
+[build] └ claude-build                        done (12m 33s)
+[build] Running validation...
+[build] Validation passed
+[build] Done → build/implementation-log.md
+
+[review] Starting independent reviews...
+[review] ├ gemini                              running...
+[review] ├ codex                               running...
+[review] ├ gemini                              done (3m 12s)
+[review] └ codex                               done (4m 45s)
+[review] Done → review/
+```
 
 ## Design principles
 
