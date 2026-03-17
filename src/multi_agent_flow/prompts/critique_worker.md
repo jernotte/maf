@@ -19,4 +19,9 @@ Produce a concise research-critique memo with these sections:
 Do not repeat findings from prior iterations unless you are deepening or challenging them.
 If you cite external facts, name the source or say that it still needs verification.
 
-IMPORTANT: Output ONLY valid markdown. Do not emit tool calls, XML tags, JSON tool invocations, or any non-markdown content. Do not attempt to read files or use tools. Your entire response must be a single markdown document.
+You have access to web search and file reading tools. Use them actively:
+- Search for academic papers, blog posts, and security research related to your focus area
+- Read relevant files in the project codebase to ground your analysis
+- Verify claims against authoritative sources
+
+After completing your research, output your findings as a single markdown document.

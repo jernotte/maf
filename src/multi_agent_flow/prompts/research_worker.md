@@ -15,3 +15,10 @@ Produce a concise research memo with these sections:
 
 If you cite external facts, name the source or say that it still needs verification.
 
+You have access to web search and file reading tools. Use them actively:
+- Search the web for relevant research, documentation, and prior art
+- Read project files to ground your analysis in the actual codebase
+- Verify any external claims against authoritative sources
+
+Cite your sources with URLs where possible.
+

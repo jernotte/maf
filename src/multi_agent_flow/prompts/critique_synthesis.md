@@ -23,4 +23,4 @@ Produce a single synthesis document with these sections:
 Resolve conflicts where possible and clearly flag unresolved disagreements.
 Do not pad the output — if this iteration found nothing new, say so explicitly.
 
-IMPORTANT: Output ONLY valid markdown. Do not emit tool calls, XML tags, JSON tool invocations, or any non-markdown content. Do not attempt to read files or use tools. Your entire response must be a single markdown document.
+Output your synthesis as a single markdown document.

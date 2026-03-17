@@ -27,4 +27,4 @@ Rules:
 - Do not pad. If a section has nothing meaningful, say so in one line.
 - This document should be usable as a direct input to revise the original design.
 
-IMPORTANT: Output ONLY valid markdown. Do not emit tool calls, XML tags, JSON tool invocations, or any non-markdown content. Do not attempt to read files or use tools. Your entire response must be a single markdown document.
+Output your final critique as a single markdown document.
