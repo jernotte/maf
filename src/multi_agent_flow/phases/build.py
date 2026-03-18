@@ -21,7 +21,6 @@ from .common import persist_agent_result, require_file, sanitize_agent_output
 
 def _parse_phases_json(raw_text: str) -> list[dict[str, Any]]:
     """Extract a JSON array from agent output, handling code fences."""
-    # Try raw parse first
     text = raw_text.strip()
     try:
         result = json.loads(text)
@@ -30,7 +29,6 @@ def _parse_phases_json(raw_text: str) -> list[dict[str, Any]]:
     except json.JSONDecodeError:
         pass
 
-    # Try extracting from markdown code fences
     match = re.search(r"```(?:json)?\s*\n(.*?)\n```", text, re.DOTALL)
     if match:
         try:
@@ -40,7 +38,6 @@ def _parse_phases_json(raw_text: str) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             pass
 
-    # Try finding the outermost array brackets
     start = text.find("[")
     end = text.rfind("]")
     if start != -1 and end > start:
@@ -71,6 +68,60 @@ def _validate_phases(phases: list[dict[str, Any]]) -> None:
         for dep in phase.get("depends_on", []):
             if dep not in seen_ids:
                 raise ValueError(f"Phase {pid} has forward-reference dependency: {dep}")
+
+
+# ---------------------------------------------------------------------------
+# Validation baseline
+# ---------------------------------------------------------------------------
+
+def _extract_failed_tests(stdout: str) -> set[str]:
+    """Extract FAILED test node IDs from pytest output."""
+    failed: set[str] = set()
+    for line in stdout.splitlines():
+        line = line.strip()
+        if line.startswith("FAILED "):
+            # "FAILED tests/unit/test_foo.py::test_bar - reason..."
+            node = line[7:].split(" - ", 1)[0].strip()
+            if node:
+                failed.add(node)
+    return failed
+
+
+def _capture_baseline(project_root: str, commands: list[str], profile: str | None) -> dict[str, Any]:
+    """Run validation before the build and record baseline failures."""
+    log("build", "Capturing validation baseline...")
+    result = run_validation(project_root, commands, profile)
+    baseline_failures: set[str] = set()
+    for cmd_result in result.commands:
+        baseline_failures |= _extract_failed_tests(cmd_result.stdout)
+    log("build", f"Baseline: {len(baseline_failures)} pre-existing test failures")
+    return {
+        "success": result.success,
+        "failed_tests": sorted(baseline_failures),
+        "result": result,
+    }
+
+
+def _compare_validation(
+    final_result,
+    baseline: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare final validation against baseline. Return regression info."""
+    baseline_failures = set(baseline["failed_tests"])
+    final_failures: set[str] = set()
+    for cmd_result in final_result.commands:
+        final_failures |= _extract_failed_tests(cmd_result.stdout)
+
+    new_failures = sorted(final_failures - baseline_failures)
+    fixed = sorted(baseline_failures - final_failures)
+
+    return {
+        "baseline_failure_count": len(baseline_failures),
+        "final_failure_count": len(final_failures),
+        "new_failures": new_failures,
+        "fixed": fixed,
+        "regressed": len(new_failures) > 0,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -192,94 +243,9 @@ def _run_phase(
     clean_output = sanitize_agent_output(result.stdout)
     write_text(phase_dir / "implementation-log.md", clean_output)
 
-    # Validation gate
-    if validation_commands:
-        log("build", f"Validating {pid}...")
-        validation = run_validation(project_root, validation_commands, None)
-        write_json(phase_dir / "validation.json", validation.to_dict())
-
-        if not validation.success:
-            log("build", f"Validation failed for {pid}, retrying...")
-            retry_result, retry_files = _retry_phase(
-                adapter, project_root, base_dir, task_title, phase,
-                phase_index, total_phases, prior_manifests, source_brief,
-                validation_commands, validation, prompt,
-            )
-            if retry_result is not None:
-                clean_output = sanitize_agent_output(retry_result.stdout)
-                write_text(phase_dir / "implementation-log.md", clean_output)
-                files_changed = sorted(set(files_changed) | set(retry_files))
-
-                retry_validation = run_validation(project_root, validation_commands, None)
-                write_json(phase_dir / "validation.json", retry_validation.to_dict())
-
-                if not retry_validation.success:
-                    manifest = _build_manifest(phase, "failed", files_changed, clean_output)
-                    write_json(phase_dir / "manifest.json", manifest)
-                    return manifest, clean_output
-            else:
-                manifest = _build_manifest(phase, "failed", files_changed, clean_output)
-                write_json(phase_dir / "manifest.json", manifest)
-                return manifest, clean_output
-
     manifest = _build_manifest(phase, "completed", files_changed, clean_output)
     write_json(phase_dir / "manifest.json", manifest)
     return manifest, clean_output
-
-
-def _retry_phase(
-    adapter: ClaudeAdapter,
-    project_root: str,
-    base_dir: Path,
-    task_title: str,
-    phase: dict[str, Any],
-    phase_index: int,
-    total_phases: int,
-    prior_manifests: list[dict[str, Any]],
-    source_brief: str,
-    validation_commands: list[str],
-    failed_validation,
-    original_prompt: str,
-) -> tuple[Any, list[str]]:
-    """Retry a phase once with validation errors appended."""
-    pid = phase["id"]
-    phase_dir = base_dir / "build" / pid
-
-    # Build error context from failed validation commands
-    error_parts: list[str] = []
-    for cmd_result in failed_validation.commands:
-        if cmd_result.exit_code != 0:
-            stdout_cap = cmd_result.stdout[:3000] if cmd_result.stdout else "(empty)"
-            stderr_cap = cmd_result.stderr[:3000] if cmd_result.stderr else "(empty)"
-            error_parts.append(
-                f"Command: {cmd_result.command}\n"
-                f"Exit code: {cmd_result.exit_code}\n"
-                f"stdout:\n{stdout_cap}\n"
-                f"stderr:\n{stderr_cap}"
-            )
-
-    retry_prompt = (
-        original_prompt
-        + "\n\n## RETRY CONTEXT\n\n"
-        "The previous build attempt for this phase failed validation. "
-        "Read the current file state on disk and fix the issues.\n\n"
-        "Validation errors:\n\n"
-        + "\n---\n".join(error_parts)
-    )
-
-    before = snapshot_changed_files(project_root)
-    agent_start("build", "claude-build", label=f"{pid}-retry")
-    result = adapter.run(retry_prompt, project_root, base_dir, "build", f"{pid}-retry")
-    agent_done("build", "claude-build", result.duration_s, label=f"{pid}-retry")
-    persist_agent_result(phase_dir, "retry", result)
-    after = snapshot_changed_files(project_root)
-    retry_files = diff_changed_files(before, after)
-
-    if result.exit_code != 0 and not result.stdout.strip():
-        log("build", f"Retry agent failed for {pid} (exit {result.exit_code})")
-        return None, []
-
-    return result, retry_files
 
 
 # ---------------------------------------------------------------------------
@@ -334,6 +300,14 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
 
     adapter = ClaudeAdapter(config.agents["claude-build"])
 
+    # Capture validation baseline before any changes
+    baseline = _capture_baseline(project_root, validation_commands, task.validation_profile) if validation_commands else None
+    if baseline:
+        write_json(base_dir / "build" / "baseline-validation.json", {
+            "success": baseline["success"],
+            "failed_tests": baseline["failed_tests"],
+        })
+
     # Stage 1: Decompose
     phases = _decompose_spec(
         adapter, config, task_id, project_root, base_dir,
@@ -343,16 +317,13 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
     task.metadata["phases_completed"] = 0
     save_task(project_root, config, task)
 
-    # Stage 2: Execute phases sequentially
+    # Stage 2: Execute all phases sequentially (agents self-validate inline)
     before_all = snapshot_changed_files(project_root)
     manifests: list[dict[str, Any]] = []
-    failed_phase: str | None = None
 
     for i, phase in enumerate(phases):
-        pid = phase["id"]
         log("build", f"Phase {i + 1}/{len(phases)}: {phase['title']}")
 
-        is_last = i == len(phases) - 1
         manifest, _ = _run_phase(
             adapter, project_root, base_dir, task.title,
             phase, i, len(phases), manifests, source_brief,
@@ -360,15 +331,10 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
         )
         manifests.append(manifest)
 
-        if manifest["status"] == "failed":
-            failed_phase = pid
-            log("build", f"Phase {pid} failed — stopping build.")
-            break
-
         task.metadata["phases_completed"] = i + 1
         save_task(project_root, config, task)
-        if is_last:
-            agent_done("build", "claude-build", 0, label="all-phases", last=True)
+
+    agent_done("build", "claude-build", 0, label="all-phases", last=True)
 
     # Stage 3: Assemble output
     log("build", "Assembling build output...")
@@ -379,17 +345,27 @@ def run_build(project_root: str, config: AppConfig, task_id: str) -> Path:
     all_changed = diff_changed_files(before_all, after_all)
     write_json(base_dir / "build" / "changed-files.json", {"changed_files": all_changed})
 
+    # Final validation with baseline comparison
     log("build", "Running final validation...")
     final_validation = run_validation(project_root, validation_commands, task.validation_profile)
     write_json(base_dir / "build" / "validation.json", final_validation.to_dict())
-    log("build", f"Final validation {'passed' if final_validation.success else 'failed'}")
 
-    if failed_phase:
-        task.status = "built"
-        task.metadata["failed_phase"] = failed_phase
+    if baseline:
+        comparison = _compare_validation(final_validation, baseline)
+        write_json(base_dir / "build" / "validation-comparison.json", comparison)
+        if comparison["regressed"]:
+            log("build", f"REGRESSION: {len(comparison['new_failures'])} new test failures introduced")
+            for t in comparison["new_failures"][:20]:
+                log("build", f"  NEW FAIL: {t}")
+            task.metadata["new_test_failures"] = comparison["new_failures"]
+        else:
+            log("build", f"No regressions ({comparison['final_failure_count']} failures, all pre-existing)")
+        if comparison["fixed"]:
+            log("build", f"Bonus: {len(comparison['fixed'])} previously failing tests now pass")
     else:
-        task.status = "built"
+        log("build", f"Final validation {'passed' if final_validation.success else 'failed'}")
 
+    task.status = "built"
     task.metadata["build_log_path"] = "build/implementation-log.md"
     task.metadata["changed_files_path"] = "build/changed-files.json"
     task.metadata["validation_path"] = "build/validation.json"
