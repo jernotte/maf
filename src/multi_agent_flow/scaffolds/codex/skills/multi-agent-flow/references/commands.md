@@ -20,6 +20,13 @@ Start from a design doc or idea:
 maf --project-root <project-root> research --input <path-or-inline-text> --title "<task>"
 ```
 
+Deep research with citation-enforced sourcing:
+
+```bash
+maf --project-root <project-root> deep-research --input <path-or-inline-text> --title "<task>" [--iterations N] [--prefetch-site URL]
+maf --project-root <project-root> deep-research --resume-task <task-id> --consolidate-only
+```
+
 Generate the spec:
 
 ```bash

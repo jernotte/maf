@@ -55,5 +55,6 @@ Use the shared `maf` workflow as the default delivery engine for design-to-code 
 - `/maf-build` - Implement the approved spec.
 - `/maf-review` - Run independent Gemini and Codex reviews.
 - `/maf-finalize` - Fix findings and finalize the task.
+- `/maf-deep-research` - Run deep research with citation-enforced sourcing.
 - `/maf-flow` - Run the full flow end-to-end with an approval pause.
 - `/maf-status` - Show the current status of a task.

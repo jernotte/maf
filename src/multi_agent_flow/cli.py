@@ -175,6 +175,7 @@ def _init_config(project_root: Path, force: bool, skip_scaffolds: bool = False) 
     if not skip_scaffolds:
         written.extend(_write_scaffold(project_root, ".claude", "claude", force))
         written.extend(_write_scaffold(project_root, ".codex/skills/multi-agent-flow", "codex/skills/multi-agent-flow", force))
+        written.extend(_write_scaffold(project_root, ".gemini", "gemini", force))
 
     return written
 
