@@ -38,7 +38,13 @@ maf --help
 maf --project-root /path/to/your/project init
 ```
 
-This writes a `.maf.yml` config and scaffolds `.claude/` and `.codex/` directories with agent instructions. Run all subsequent commands from your project directory.
+This writes:
+- `.maf.yml` — project config (agent commands, research focuses, validation)
+- `.claude/` — Claude Code slash commands and project instructions
+- `.codex/` — Codex skill files and `config.toml` (sandbox, approval, web search settings)
+- `.gemini/` — Gemini `settings.json` (shell, search, file access tool permissions)
+
+Run all subsequent commands from your project directory.
 
 ### 2. Run research
 
@@ -98,6 +104,62 @@ maf research-loop --input idea.md --title "Redesign API" --iterations 5
 
 Each iteration builds on the previous synthesis. A final consolidation pass produces the output. Supports `--resume-task` and `--start-iteration` for resuming interrupted runs.
 
+## Deep research
+
+For evidence-backed research with structured citations and source fetching:
+
+```bash
+maf deep-research --input "What are the tradeoffs of CRDT vs OT for collaborative editing?" --title "CRDT vs OT" --iterations 3
+```
+
+Deep research differs from the research loop:
+
+- **Citation-enforced**: every factual claim must cite a source. Uncited claims are marked `[UNVERIFIED]`.
+- **Source fetching**: workers use `fetch_source` to retrieve full page content from URLs found via web search, with a 6-tier fallback chain (direct HTTP, wget, Jina Reader, Google Cache, Wayback Machine, snippet).
+- **Evidence assessment**: findings are rated by evidence strength (strong/moderate/weak/conflicting).
+- **Source gap report**: after completion, any sources that couldn't be fetched are listed in `research/source-gaps.md` for manual retrieval.
+
+### Pre-fetching a site
+
+If your research centers on a specific site's documentation:
+
+```bash
+maf deep-research --input "How does X work?" --title "X deep dive" --prefetch-site https://docs.example.com
+```
+
+This downloads the site recursively before workers start. Workers can then read the local copy instead of fetching individual pages.
+
+### Resuming and re-consolidation
+
+```bash
+# Resume from a specific iteration
+maf deep-research --resume-task <task-id> --start-iteration 3 --iterations 5
+
+# Re-run only final consolidation (e.g. after manually adding missing sources)
+maf deep-research --resume-task <task-id> --consolidate-only
+```
+
+### Fetch source tool
+
+`fetch_source` is a standalone CLI tool that agents call to retrieve URL content:
+
+```bash
+python -m multi_agent_flow.fetch_source "https://example.com/article" /path/to/sources/source-001.md --snippet "fallback text"
+```
+
+Tiered fallback chain (first success wins):
+
+| Tier | Method | Timeout |
+|------|--------|---------|
+| 1 | Direct HTTP (urllib) | 15s |
+| 2 | wget | 20s |
+| 3 | Jina Reader (r.jina.ai) | 30s |
+| 4 | Google Cache | 15s |
+| 5 | Wayback Machine | 15s |
+| 6 | Snippet fallback (--snippet) | N/A |
+
+Each fetched source gets a `.meta.json` sidecar with the URL, fetch tier, size, and timestamp. The tool is also available in the regular research loop as an optional enhancement.
+
 ## Configuration
 
 `maf init` writes a `.maf.yml` in your project root. It auto-detects your project language and sets validation commands accordingly (`pyproject.toml` → `pytest`, `package.json` → `npm test`).
@@ -106,6 +168,9 @@ Each iteration builds on the previous synthesis. A final consolidation pass prod
 agents:
   claude:
     command: [claude, -p, --allowedTools, "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", --no-session-persistence]
+    timeout_s: 1800
+  claude-research:
+    command: [claude, -p, --allowedTools, "Bash,Read,Glob,Grep,WebFetch,WebSearch", --no-session-persistence]
     timeout_s: 1800
   claude-build:
     command: [claude, -p, --allowedTools, "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", --no-session-persistence]
@@ -116,6 +181,12 @@ agents:
   gemini:
     command: [gemini, -p, ""]
     timeout_s: 1800
+  gemini-research:
+    command: [gemini, -p, ""]
+    timeout_s: 1800
+  codex-research:
+    command: [codex, exec, --skip-git-repo-check, -a, never, -s, workspace-write, --search, -c, "sandbox_workspace_write.network_access=true", "-"]
+    timeout_s: 1800
 
 research:
   worker_focuses:
@@ -123,6 +194,15 @@ research:
     - domain-model
     - risks-and-edge-cases
   max_workers: 3
+
+deep_research:
+  worker_focuses:
+    - foundational-sources
+    - supporting-evidence
+    - counterarguments
+    - implementation-precedent
+  max_workers: 4
+  iterations: 3
 
 validation_profiles:
   default:
@@ -133,19 +213,30 @@ validation_profiles:
 
 Each agent entry defines how maf invokes an external AI CLI. The `command` list is the exact argv passed to `subprocess.run` — the phase prompt is piped to stdin. `timeout_s` is the maximum wall-clock time before the agent is killed.
 
-- **claude** — used for research workers and spec generation. `--allowedTools` pre-approves file and web tools so research workers can read the codebase and look things up.
-- **claude-build** — used for build and finalize. `--allowedTools` pre-approves file and shell tools so the agent can write code without interactive permission prompts. Add or remove tools here to control what the build agent can do.
+- **claude** — used for synthesis and spec generation. `--allowedTools` pre-approves file and web tools.
+- **claude-research** — used for research workers. Read-only tool access (no Edit/Write).
+- **claude-build** — used for build and finalize. Full tool access including Edit/Write.
 - **codex** — used for research and review. Runs in exec mode with stdin prompt.
 - **gemini** — used for research and review. Runs in prompt mode.
+- **gemini-research** — used for deep research workers. Tool permissions come from `.gemini/settings.json`.
+- **codex-research** — used for deep research workers. Runs with auto-approval, workspace write, live web search, and network access enabled.
 
 To swap an agent's model, change the command. To disable an agent entirely, remove it from the config (phases that need it will fail with a clear error).
 
 ### research
 
-Controls the parallel research phase.
+Controls the parallel research and research-loop phases.
 
 - **worker_focuses** — each entry spawns a separate Claude research worker with that focus area as its lens. Add more focuses for broader coverage, remove for faster/cheaper runs. Examples: `architecture`, `domain-model`, `risks-and-edge-cases`, `feasibility`, `gaps-and-missing-requirements`, `security`.
-- **max_workers** — limits how many Claude research workers run in parallel. All focuses run, but only N at a time. If the list has 8 entries and `max_workers` is 3, all 8 run in batches of 3. Gemini and Codex always run one broad-research worker each on top of this.
+- **max_workers** — limits how many Claude research workers run in parallel. All focuses run, but only N at a time. Gemini and Codex always run one broad-research worker each on top of this.
+
+### deep_research
+
+Controls the deep research phase.
+
+- **worker_focuses** — each entry spawns a Claude worker with that research angle. Default focuses are designed for evidence gathering: `foundational-sources` (canonical references), `supporting-evidence` (corroboration), `counterarguments` (opposing views), `implementation-precedent` (real-world examples).
+- **max_workers** — parallel worker limit (default: 4).
+- **iterations** — number of research-critique iterations (default: 3). Each iteration builds on the previous synthesis.
 
 ### validation_profiles
 
@@ -166,6 +257,50 @@ validation_profiles:
 
 Use `--validation-profile strict` on research to override the default for a task.
 
+## Agent scaffolds
+
+`maf init` writes agent-specific config files into your project:
+
+### `.gemini/settings.json`
+
+Enables tools that Gemini workers need:
+
+```json
+{
+  "tools": {
+    "google_search": true,
+    "run_shell_command": true,
+    "read_file": true,
+    "list_directory": true
+  }
+}
+```
+
+### `.codex/config.toml`
+
+Project-level Codex config for non-interactive execution:
+
+```toml
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+web_search = "live"
+
+[sandbox_workspace_write]
+network_access = true
+```
+
+### Updating scaffolds
+
+If you initialized a project with an older version of maf, you can update just the scaffolds without touching `.maf.yml`:
+
+```bash
+# Add only new files (won't overwrite existing)
+maf init --scaffolds-only
+
+# Force-update all scaffolds to latest versions
+maf init --update-scaffolds
+```
+
 ## Artifacts
 
 All state lives under `.maf/tasks/<task-id>/`:
@@ -174,8 +309,21 @@ All state lives under `.maf/tasks/<task-id>/`:
 task.json                    # task metadata and status
 normalized-brief.md          # canonical input document
 research/
-  claude-worker-*.md         # per-agent research outputs
-  synthesis.md               # consolidated research
+  iteration-001/             # per-iteration (research-loop and deep-research)
+    sources/                 # fetched source content (deep-research)
+      source-001.md
+      source-001.meta.json
+    claude-worker-*.findings.md
+    gemini.findings.md
+    codex.findings.md
+    synthesis.md
+  iteration-002/
+  ...
+  final/
+    consolidation.md
+  prefetched-sites/          # optional site mirror (deep-research --prefetch-site)
+  source-gaps.md             # unfetched sources for manual retrieval
+  synthesis.md               # final consolidated output
 spec/
   spec-draft.md              # generated spec
   spec-approved.md           # approved snapshot
@@ -191,16 +339,17 @@ finalize/
 
 ## Claude Code integration
 
-`maf init` scaffolds Claude Code skills into your project. Available commands:
+`maf init` scaffolds Claude Code slash commands into your project. Available commands:
 
 - `/maf-research` — create a task and run research
+- `/maf-research-loop` — iterative research-critique loop
+- `/maf-deep-research` — deep research with citation-enforced sourcing
 - `/maf-spec` — generate a spec draft
 - `/maf-approve-spec` — approve the spec
 - `/maf-build` — implement the approved spec
 - `/maf-review` — run independent reviews
 - `/maf-finalize` — fix findings and finalize
 - `/maf-flow` — run the full flow end-to-end
-- `/maf-research-loop` — iterative research-critique loop
 - `/maf-status` — show task status
 
 ## Progress feedback
@@ -208,19 +357,23 @@ finalize/
 All phases emit progress to stderr so you can see what's happening during long runs:
 
 ```
-[build] Rendering prompt...
-[build] ├ claude-build                        running...
-[build] └ claude-build                        done (12m 33s)
-[build] Running validation...
-[build] Validation passed
-[build] Done → build/implementation-log.md
-
-[review] Starting independent reviews...
-[review] ├ gemini                              running...
-[review] ├ codex                               running...
-[review] ├ gemini                              done (3m 12s)
-[review] └ codex                               done (4m 45s)
-[review] Done → review/
+[deep-research] Pre-fetching site: https://docs.example.com
+[deep-research] Pre-fetched 47 files from docs.example.com
+[deep-research] Iteration 1/3
+[research:1/3] ├ claude-worker-1 [foundational-sources]     running...
+[research:1/3] ├ claude-worker-2 [supporting-evidence]      running...
+[research:1/3] ├ claude-worker-3 [counterarguments]         running...
+[research:1/3] ├ claude-worker-4 [implementation-precedent] running...
+[research:1/3] ├ gemini [broad-critique]                    running...
+[research:1/3] ├ codex [broad-critique]                     running...
+[research:1/3] ├ claude-worker-1 [foundational-sources]     done (8m 12s)
+[research:1/3] └ codex [broad-critique]                     done (9m 45s)
+[research:1/3] ├ claude [synthesis]                         running...
+[research:1/3] └ claude [synthesis]                         done (4m 33s)
+[deep-research] Iteration 2/3
+...
+[deep-research] Final consolidation...
+[deep-research] Source gaps found — see research/source-gaps.md
 ```
 
 ## Design principles
@@ -230,6 +383,7 @@ All phases emit progress to stderr so you can see what's happening during long r
 - **Agent-agnostic**: thin adapters wrap each CLI. Phase logic lives in phase modules, not agent code.
 - **Project-agnostic**: no framework assumptions. Validation commands come from config.
 - **Auditable**: every prompt sent and every output received is persisted to disk.
+- **Citation-enforced** (deep research): every claim must cite a source. Evidence strength is tracked across iterations.
 
 ## License
 
