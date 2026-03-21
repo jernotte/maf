@@ -6,6 +6,8 @@ Use the normalized brief below as the source of truth:
 
 Your focus area is: {focus}
 
+IMPORTANT: Output your research memo directly as text. Do NOT use the Write tool to create files — your stdout is captured and passed to the synthesis step. If you write to a file, the synthesis step will never see your work.
+
 Produce a concise research memo with these sections:
 - Assumptions
 - Findings

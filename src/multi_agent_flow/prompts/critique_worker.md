@@ -8,6 +8,8 @@ Your focus area is: {focus}
 
 {previous_context}
 
+IMPORTANT: Output your research-critique memo directly as text. Do NOT use the Write tool to create files — your stdout is captured and passed to the synthesis step. If you write to a file, the synthesis step will never see your work.
+
 Produce a concise research-critique memo with these sections:
 - New Findings (things not covered or insufficiently covered in prior iterations)
 - Challenged Assumptions (assumptions from the brief or prior iterations that deserve scrutiny)
@@ -24,4 +26,4 @@ You have access to web search and file reading tools. Use them actively:
 - Read relevant files in the project codebase to ground your analysis
 - Verify claims against authoritative sources
 
-After completing your research, output your findings as a single markdown document.
+After completing your research, output your findings directly as text (NOT as a file).

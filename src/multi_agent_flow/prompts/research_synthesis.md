@@ -18,3 +18,5 @@ Produce a single synthesis document with these sections:
 
 Resolve conflicts where possible and clearly flag unresolved disagreements.
 
+Output your synthesis directly as text. Do NOT use the Write tool to create files.
+

@@ -23,4 +23,4 @@ Produce a single synthesis document with these sections:
 Resolve conflicts where possible and clearly flag unresolved disagreements.
 Do not pad the output — if this iteration found nothing new, say so explicitly.
 
-Output your synthesis as a single markdown document.
+Output your synthesis directly as text. Do NOT use the Write tool to create files.

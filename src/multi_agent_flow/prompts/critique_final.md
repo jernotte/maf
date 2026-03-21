@@ -27,4 +27,4 @@ Rules:
 - Do not pad. If a section has nothing meaningful, say so in one line.
 - This document should be usable as a direct input to revise the original design.
 
-Output your final critique as a single markdown document.
+Output your final critique directly as text. Do NOT use the Write tool to create files.
