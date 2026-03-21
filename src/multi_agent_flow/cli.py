@@ -26,7 +26,12 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--skip-scaffolds",
         action="store_true",
-        help="Only write .maf.yml, skip .claude/ and .codex/ scaffolds.",
+        help="Only write .maf.yml, skip .claude/, .codex/, and .gemini/ scaffolds.",
+    )
+    init_parser.add_argument(
+        "--scaffolds-only",
+        action="store_true",
+        help="Only write scaffolds (.claude/, .codex/, .gemini/), skip .maf.yml. Useful for adding new scaffolds to an existing project.",
     )
 
     research = subparsers.add_parser("research", help="Create a task and run research.")
@@ -152,8 +157,27 @@ def _detect_validation_commands(project_root: Path) -> list[str]:
     return commands
 
 
-def _init_config(project_root: Path, force: bool, skip_scaffolds: bool = False) -> list[Path]:
+def _write_all_scaffolds(project_root: Path, force: bool) -> list[Path]:
     written: list[Path] = []
+    written.extend(_write_scaffold(project_root, ".claude", "claude", force))
+    written.extend(_write_scaffold(project_root, ".codex/skills/multi-agent-flow", "codex/skills/multi-agent-flow", force))
+    written.extend(_write_scaffold(project_root, ".gemini", "gemini", force))
+    return written
+
+
+def _init_config(
+    project_root: Path,
+    force: bool,
+    skip_scaffolds: bool = False,
+    scaffolds_only: bool = False,
+) -> list[Path]:
+    written: list[Path] = []
+
+    if scaffolds_only:
+        # Only write scaffolds, skip .maf.yml entirely.
+        # Without --force, existing files are skipped (not overwritten).
+        written.extend(_write_all_scaffolds(project_root, force))
+        return written
 
     destination = project_root / ".maf.yml"
     if destination.exists() and not force:
@@ -173,9 +197,7 @@ def _init_config(project_root: Path, force: bool, skip_scaffolds: bool = False) 
     written.append(destination)
 
     if not skip_scaffolds:
-        written.extend(_write_scaffold(project_root, ".claude", "claude", force))
-        written.extend(_write_scaffold(project_root, ".codex/skills/multi-agent-flow", "codex/skills/multi-agent-flow", force))
-        written.extend(_write_scaffold(project_root, ".gemini", "gemini", force))
+        written.extend(_write_all_scaffolds(project_root, force))
 
     return written
 
@@ -186,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     project_root = Path(args.project_root).resolve()
 
     if args.command == "init":
-        written = _init_config(project_root, args.force, args.skip_scaffolds)
+        written = _init_config(project_root, args.force, args.skip_scaffolds, args.scaffolds_only)
         for path in written:
             print(path)
         return 0
