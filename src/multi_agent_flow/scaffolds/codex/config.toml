@@ -1,0 +1,15 @@
+# Codex project config for maf deep-research workers.
+# See https://developers.openai.com/codex/config-reference
+
+# No approval prompts — workers run headless via piped stdin.
+approval_policy = "never"
+
+# Allow writing to workspace (fetch_source saves files to .maf/tasks/).
+sandbox_mode = "workspace-write"
+
+# Live web search for finding sources.
+web_search = "live"
+
+[sandbox_workspace_write]
+# Allow outbound HTTP so fetch_source / wget / urllib can reach URLs.
+network_access = true

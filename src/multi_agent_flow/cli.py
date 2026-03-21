@@ -165,7 +165,7 @@ def _detect_validation_commands(project_root: Path) -> list[str]:
 def _write_all_scaffolds(project_root: Path, force: bool) -> list[Path]:
     written: list[Path] = []
     written.extend(_write_scaffold(project_root, ".claude", "claude", force))
-    written.extend(_write_scaffold(project_root, ".codex/skills/multi-agent-flow", "codex/skills/multi-agent-flow", force))
+    written.extend(_write_scaffold(project_root, ".codex", "codex", force))
     written.extend(_write_scaffold(project_root, ".gemini", "gemini", force))
     return written
 
