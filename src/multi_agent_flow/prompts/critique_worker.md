@@ -45,4 +45,14 @@ You have access to web search and file reading tools. Use them actively:
 - Read relevant files in the project codebase to ground your analysis
 - Verify claims against authoritative sources
 
+## How to Fetch Source Content (Optional)
+
+If you find a relevant URL during your research, you can fetch its full content for deeper analysis:
+
+```bash
+python -m multi_agent_flow.fetch_source "URL" {sources_dir}/source-NNN.md --snippet "search result preview"
+```
+
+This fetches the URL content with automatic fallback (direct HTTP → wget → Jina Reader → Google Cache → Wayback Machine → snippet). The fetched content is saved locally so you can Read it for detailed analysis.
+
 After completing your research, also output a brief summary of your findings as text (your detailed findings are saved to the file).

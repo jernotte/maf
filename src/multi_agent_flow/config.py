@@ -27,6 +27,20 @@ class ResearchConfig:
 
 
 @dataclass
+class DeepResearchConfig:
+    worker_focuses: list[str] = field(
+        default_factory=lambda: [
+            "foundational-sources",
+            "supporting-evidence",
+            "counterarguments",
+            "implementation-precedent",
+        ]
+    )
+    max_workers: int = 4
+    iterations: int = 3
+
+
+@dataclass
 class ValidationProfile:
     name: str
     commands: list[str]
@@ -38,6 +52,7 @@ class AppConfig:
     default_validation_profile: str | None = None
     agents: dict[str, AgentConfig] = field(default_factory=dict)
     research: ResearchConfig = field(default_factory=ResearchConfig)
+    deep_research: DeepResearchConfig = field(default_factory=DeepResearchConfig)
     validation_profiles: dict[str, ValidationProfile] = field(default_factory=dict)
 
     def resolve_validation_commands(self, profile_name: str | None) -> list[str]:
@@ -59,11 +74,13 @@ def _normalize_command(raw: str | list[str] | None, fallback_binary: str) -> lis
 _AGENT_DEFAULTS: dict[str, tuple[list[str], int]] = {
     "claude-research": (["claude", "-p", "--allowedTools", "Bash,Read,Glob,Grep,WebFetch,WebSearch", "--no-session-persistence"], 1800),
     "claude-build": (["claude", "-p", "--allowedTools", "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", "--no-session-persistence"], 3600),
+    "gemini-research": (["gemini", "-p", ""], 1800),
+    "codex-research": (["codex", "exec", "--skip-git-repo-check", "-c", "shell_tool=true", "-"], 1800),
 }
 
 
 def _load_agent_configs(raw: dict | None) -> dict[str, AgentConfig]:
-    agent_names = ("claude", "claude-research", "claude-build", "codex", "gemini")
+    agent_names = ("claude", "claude-research", "claude-build", "codex", "gemini", "gemini-research", "codex-research")
     configs: dict[str, AgentConfig] = {}
     raw = raw or {}
     for name in agent_names:
@@ -114,11 +131,30 @@ def load_project_config(project_root: str | Path) -> AppConfig:
         max_workers=int(research_data.get("max_workers", 3)),
     )
 
+    deep_research_data = data.get("deep_research", {})
+    deep_research = DeepResearchConfig(
+        worker_focuses=[
+            str(item)
+            for item in deep_research_data.get(
+                "worker_focuses",
+                [
+                    "foundational-sources",
+                    "supporting-evidence",
+                    "counterarguments",
+                    "implementation-precedent",
+                ],
+            )
+        ],
+        max_workers=int(deep_research_data.get("max_workers", 4)),
+        iterations=int(deep_research_data.get("iterations", 3)),
+    )
+
     return AppConfig(
         maf_dir=str(data.get("maf_dir", ".maf")),
         default_validation_profile=data.get("default_validation_profile"),
         agents=_load_agent_configs(data.get("agents")),
         research=research,
+        deep_research=deep_research,
         validation_profiles=_load_validation_profiles(data.get("validation_profiles")),
     )
 

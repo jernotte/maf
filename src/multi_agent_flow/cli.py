@@ -7,8 +7,8 @@ import sys
 from typing import Iterator
 
 from .config import load_project_config
-from .phases import approve_spec, run_build, run_finalize, run_research, run_research_loop, run_review, run_spec
-from .phases.research_loop import resume_research_loop
+from .phases import approve_spec, run_build, run_deep_research, run_finalize, run_research, run_research_loop, run_review, run_spec
+from .phases.research_loop import resume_deep_research, resume_research_loop
 from .phases.spec import run_spec_direct
 
 
@@ -60,6 +60,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--start-iteration",
         type=int,
         help="Iteration to resume from (requires --resume-task). Prior iterations are loaded from disk.",
+    )
+
+    deep_research = subparsers.add_parser(
+        "deep-research",
+        help="Deep research with citation-enforced sourcing and tiered URL fetching.",
+    )
+    deep_research.add_argument("--input", help="Path to a design doc or inline idea text (required for new tasks).")
+    deep_research.add_argument("--title", help="Short task title (required for new tasks).")
+    deep_research.add_argument("--iterations", type=int, help="Number of research iterations (default: from config).")
+    deep_research.add_argument(
+        "--max-research-workers",
+        type=int,
+        help="Override the configured number of research workers.",
+    )
+    deep_research.add_argument(
+        "--prefetch-site",
+        metavar="URL",
+        help="Recursively download a site before research starts for local access.",
+    )
+    deep_research.add_argument(
+        "--resume-task",
+        help="Resume an existing deep research task.",
+    )
+    deep_research.add_argument(
+        "--start-iteration",
+        type=int,
+        help="Iteration to resume from (requires --resume-task).",
+    )
+    deep_research.add_argument(
+        "--consolidate-only",
+        action="store_true",
+        help="Skip iterations and re-run only final consolidation (requires --resume-task).",
     )
 
     spec_direct = subparsers.add_parser(
@@ -169,6 +201,33 @@ def main(argv: list[str] | None = None) -> int:
             validation_profile=args.validation_profile,
             max_research_workers=args.max_research_workers,
         )
+        print(task_id)
+        return 0
+
+    if args.command == "deep-research":
+        if args.resume_task:
+            task_id = resume_deep_research(
+                project_root=str(project_root),
+                config=config,
+                task_id=args.resume_task,
+                start_iteration=args.start_iteration,
+                iterations=args.iterations,
+                max_research_workers=args.max_research_workers,
+                consolidate_only=args.consolidate_only,
+            )
+        else:
+            if not args.input or not args.title:
+                print("Error: --input and --title are required for new tasks.", file=sys.stderr)
+                return 1
+            task_id = run_deep_research(
+                project_root=str(project_root),
+                config=config,
+                title=args.title,
+                input_value=args.input,
+                iterations=args.iterations,
+                max_research_workers=args.max_research_workers,
+                prefetch_site_url=args.prefetch_site,
+            )
         print(task_id)
         return 0
 

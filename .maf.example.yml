@@ -23,6 +23,21 @@ agents:
       - -p
       - ""
     timeout_s: 1800
+  gemini-research:
+    command:
+      - gemini
+      - -p
+      - ""
+    timeout_s: 1800
+  codex-research:
+    command:
+      - codex
+      - exec
+      - --skip-git-repo-check
+      - -c
+      - "shell_tool=true"
+      - "-"
+    timeout_s: 1800
 
 research:
   worker_focuses:
@@ -30,6 +45,15 @@ research:
     - domain-model
     - risks-and-edge-cases
   max_workers: 3
+
+deep_research:
+  worker_focuses:
+    - foundational-sources
+    - supporting-evidence
+    - counterarguments
+    - implementation-precedent
+  max_workers: 4
+  iterations: 3
 
 validation_profiles:
   default:
