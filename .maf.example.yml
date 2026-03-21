@@ -34,8 +34,8 @@ agents:
       - codex
       - exec
       - --skip-git-repo-check
-      - -c
-      - "shell_tool=true"
+      - --full-auto
+      - --search
       - "-"
     timeout_s: 1800
 
