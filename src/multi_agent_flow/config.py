@@ -75,7 +75,7 @@ _AGENT_DEFAULTS: dict[str, tuple[list[str], int]] = {
     "claude-research": (["claude", "-p", "--allowedTools", "Bash,Read,Glob,Grep,WebFetch,WebSearch", "--no-session-persistence"], 1800),
     "claude-build": (["claude", "-p", "--allowedTools", "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", "--no-session-persistence"], 3600),
     "gemini-research": (["gemini", "-p", ""], 1800),
-    "codex-research": (["codex", "exec", "--skip-git-repo-check", "--full-auto", "--search", "-"], 1800),
+    "codex-research": (["codex", "exec", "--skip-git-repo-check", "-a", "never", "-s", "workspace-write", "--search", "-c", "sandbox_workspace_write.network_access=true", "-"], 1800),
 }
 
 

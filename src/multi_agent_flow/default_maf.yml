@@ -50,8 +50,13 @@ agents:
       - codex
       - exec
       - --skip-git-repo-check
-      - --full-auto
+      - -a
+      - never
+      - -s
+      - workspace-write
       - --search
+      - -c
+      - "sandbox_workspace_write.network_access=true"
       - "-"
     timeout_s: 1800
 
