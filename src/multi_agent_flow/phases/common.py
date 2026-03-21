@@ -8,6 +8,112 @@ from ..models import AgentExecutionResult
 from ..state import write_json, write_text
 
 
+def persist_worker_findings(
+    iter_dir: Path,
+    stem: str,
+    focus: str,
+    result: AgentExecutionResult,
+) -> None:
+    """Ensure a canonical findings file and metadata sidecar exist for a worker.
+
+    Three cases:
+    1. Agent wrote the file via write_findings tool → file already exists.
+    2. Agent didn't write the file (Gemini/Codex, or Claude didn't use tool) → write sanitized stdout.
+    3. Agent failed → write whatever stdout was captured.
+    """
+    findings_path = iter_dir / f"{stem}.findings.md"
+    source: str
+
+    if findings_path.exists():
+        # Case 1: agent already wrote findings via the write_findings tool
+        source = "agent_write"
+    else:
+        # Case 2/3: orchestrator writes sanitized stdout as fallback
+        clean_output = sanitize_agent_output(result.stdout)
+        write_text(findings_path, clean_output)
+        source = "orchestrator_fallback"
+
+    size_bytes = findings_path.stat().st_size
+
+    meta = {
+        "stem": stem,
+        "focus": focus,
+        "size_bytes": size_bytes,
+        "exit_code": result.exit_code,
+        "timed_out": result.timed_out,
+        "source": source,
+    }
+    write_json(iter_dir / f"{stem}.findings.meta.json", meta)
+
+
+def _format_size(size_bytes: int) -> str:
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f}KB"
+    return f"{size_bytes}B"
+
+
+def build_worker_manifest(iter_dir: Path) -> str:
+    """Build a markdown manifest table from worker metadata sidecar files."""
+    rows: list[tuple[str, str, str, str]] = []
+    for meta_path in sorted(iter_dir.glob("*.findings.meta.json")):
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        findings_path = iter_dir / f"{meta['stem']}.findings.md"
+        rows.append((
+            meta["stem"],
+            meta["focus"],
+            _format_size(meta["size_bytes"]),
+            str(findings_path),
+        ))
+
+    if not rows:
+        return "No worker outputs available."
+
+    lines = [
+        "## Available Worker Outputs",
+        "",
+        "| Worker | Focus | Size | Path |",
+        "|--------|-------|------|------|",
+    ]
+    for stem, focus, size, path in rows:
+        lines.append(f"| {stem} | {focus} | {size} | {path} |")
+
+    lines.append("")
+    lines.append(
+        "Read specific worker outputs using the Read tool. "
+        "Search across all findings using Grep."
+    )
+    return "\n".join(lines)
+
+
+def build_syntheses_manifest(research_dir: Path, total_iterations: int) -> str:
+    """Build a markdown manifest of iteration synthesis files."""
+    rows: list[tuple[int, str, str]] = []
+    for i in range(1, total_iterations + 1):
+        synth_path = research_dir / f"iteration-{i:03d}" / "synthesis.md"
+        if synth_path.exists():
+            size = _format_size(synth_path.stat().st_size)
+            rows.append((i, size, str(synth_path)))
+
+    if not rows:
+        return "No iteration syntheses available."
+
+    lines = [
+        "## Iteration Syntheses",
+        "",
+        "| Iteration | Size | Path |",
+        "|-----------|------|------|",
+    ]
+    for iteration, size, path in rows:
+        lines.append(f"| {iteration} | {size} | {path} |")
+
+    lines.append("")
+    lines.append(
+        "Read each synthesis using the Read tool, starting from iteration 1. "
+        "Use Grep to search for specific themes across all syntheses."
+    )
+    return "\n".join(lines)
+
+
 def _extract_from_write_calls(text: str) -> str | None:
     """Try to extract content from hallucinated Write tool calls.
 

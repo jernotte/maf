@@ -57,12 +57,13 @@ def _normalize_command(raw: str | list[str] | None, fallback_binary: str) -> lis
 
 
 _AGENT_DEFAULTS: dict[str, tuple[list[str], int]] = {
+    "claude-research": (["claude", "-p", "--allowedTools", "Bash,Read,Glob,Grep,WebFetch,WebSearch", "--no-session-persistence"], 1800),
     "claude-build": (["claude", "-p", "--allowedTools", "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch", "--no-session-persistence"], 3600),
 }
 
 
 def _load_agent_configs(raw: dict | None) -> dict[str, AgentConfig]:
-    agent_names = ("claude", "claude-build", "codex", "gemini")
+    agent_names = ("claude", "claude-research", "claude-build", "codex", "gemini")
     configs: dict[str, AgentConfig] = {}
     raw = raw or {}
     for name in agent_names:

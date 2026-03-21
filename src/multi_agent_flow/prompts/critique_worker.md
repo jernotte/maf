@@ -8,9 +8,28 @@ Your focus area is: {focus}
 
 {previous_context}
 
-IMPORTANT: Output your research-critique memo directly as text. Do NOT use the Write tool to create files — your stdout is captured and passed to the synthesis step. If you write to a file, the synthesis step will never see your work.
+## How to Save Your Findings
 
-Produce a concise research-critique memo with these sections:
+Write your findings incrementally to a file as you research. Use this command:
+
+```bash
+python -m multi_agent_flow.write_findings {output_path} << 'FINDINGS'
+your content here
+FINDINGS
+```
+
+To append more findings as you continue researching:
+
+```bash
+python -m multi_agent_flow.write_findings {output_path} --append << 'FINDINGS'
+additional content here
+FINDINGS
+```
+
+This lets you offload findings to disk as you go. You can read your own file at any time
+with the Read tool to review what you've already written.
+
+Your final document at {output_path} should be a complete research-critique memo with these sections:
 - New Findings (things not covered or insufficiently covered in prior iterations)
 - Challenged Assumptions (assumptions from the brief or prior iterations that deserve scrutiny)
 - Gaps Identified (missing requirements, unaddressed risks, unstated dependencies)
@@ -26,4 +45,4 @@ You have access to web search and file reading tools. Use them actively:
 - Read relevant files in the project codebase to ground your analysis
 - Verify claims against authoritative sources
 
-After completing your research, output your findings directly as text (NOT as a file).
+After completing your research, also output a brief summary of your findings as text (your detailed findings are saved to the file).

@@ -10,6 +10,14 @@ agents:
       - "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch"
       - --no-session-persistence
     timeout_s: 1800
+  claude-research:
+    command:
+      - claude
+      - -p
+      - --allowedTools
+      - "Bash,Read,Glob,Grep,WebFetch,WebSearch"
+      - --no-session-persistence
+    timeout_s: 1800
   claude-build:
     command:
       - claude

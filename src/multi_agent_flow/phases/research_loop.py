@@ -9,12 +9,19 @@ from ..inputs import normalize_input
 from ..progress import agent_done, agent_start, log
 from ..prompts import render_prompt
 from ..state import create_task, load_task, read_text, save_task, task_dir, write_text
-from .common import persist_agent_result, sanitize_agent_output
+from .common import (
+    build_syntheses_manifest,
+    build_worker_manifest,
+    persist_agent_result,
+    persist_worker_findings,
+    sanitize_agent_output,
+)
 
 
 def _build_adapters(config: AppConfig) -> dict[str, object]:
     return {
         "claude": ClaudeAdapter(config.agents["claude"]),
+        "claude-research": ClaudeAdapter(config.agents["claude-research"]),
         "codex": CodexAdapter(config.agents["codex"]),
         "gemini": GeminiAdapter(config.agents["gemini"]),
     }
@@ -25,31 +32,32 @@ def _run_iteration(
     total_iterations: int,
     title: str,
     normalized_brief: str,
-    previous_synthesis: str,
+    previous_synthesis_path: Path | None,
     worker_focuses: list[str],
     concurrency: int,
     adapters: dict[str, object],
     project_root: str,
     base_dir: Path,
-) -> str:
-    """Run one research-critique iteration. Returns the synthesis text."""
+) -> Path:
+    """Run one research-critique iteration. Returns the path to synthesis.md."""
     iter_dir = base_dir / "research" / f"iteration-{iteration:03d}"
     iter_dir.mkdir(parents=True, exist_ok=True)
 
-    if previous_synthesis:
+    if previous_synthesis_path:
         previous_context = (
-            f"Previous iteration synthesis (iteration {iteration - 1}):\n\n"
-            f"{previous_synthesis}"
+            f"Previous iteration synthesis is at: {previous_synthesis_path}\n"
+            f"Read it with the Read tool to see what prior iterations found."
         )
     else:
         previous_context = "This is the first iteration. There is no prior research to build on."
 
     jobs: list[tuple[str, str, object, str]] = []
     for index, focus in enumerate(worker_focuses, start=1):
+        output_path = str(iter_dir / f"claude-worker-{index}.findings.md")
         jobs.append((
             f"claude-worker-{index}",
             focus,
-            adapters["claude"],
+            adapters["claude-research"],
             render_prompt(
                 "critique_worker.md",
                 title=title,
@@ -58,6 +66,7 @@ def _run_iteration(
                 iteration=str(iteration),
                 total_iterations=str(total_iterations),
                 previous_context=previous_context,
+                output_path=output_path,
             ),
         ))
     jobs.append((
@@ -72,6 +81,7 @@ def _run_iteration(
             iteration=str(iteration),
             total_iterations=str(total_iterations),
             previous_context=previous_context,
+            output_path=str(iter_dir / "gemini.findings.md"),
         ),
     ))
     jobs.append((
@@ -86,6 +96,7 @@ def _run_iteration(
             iteration=str(iteration),
             total_iterations=str(total_iterations),
             previous_context=previous_context,
+            output_path=str(iter_dir / "codex.findings.md"),
         ),
     ))
 
@@ -93,7 +104,6 @@ def _run_iteration(
     for stem, focus, _adapter, _prompt in jobs:
         agent_start(phase, stem, label=focus)
 
-    summaries: list[str] = []
     completed_count = 0
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         future_map = {
@@ -112,20 +122,13 @@ def _run_iteration(
             result = future.result()
             completed_count += 1
             agent_done(phase, stem, result.duration_s, label=focus, last=completed_count == len(jobs))
-            persist_agent_result(iter_dir, stem, result)
-            clean_output = sanitize_agent_output(result.stdout)
-            summaries.append(
-                f"## {stem}\n"
-                f"- focus: {focus}\n"
-                f"- exit_code: {result.exit_code}\n"
-                f"- timed_out: {result.timed_out}\n\n"
-                f"{clean_output}\n"
-            )
+            persist_agent_result(iter_dir, stem, result)  # raw audit trail
+            persist_worker_findings(iter_dir, stem, focus, result)  # canonical findings + meta
 
-    if previous_synthesis:
+    if previous_synthesis_path:
         previous_synthesis_context = (
-            f"Previous iteration synthesis (iteration {iteration - 1}):\n\n"
-            f"{previous_synthesis}"
+            f"Previous iteration synthesis is at: {previous_synthesis_path}\n"
+            f"Read it with the Read tool to understand what prior iterations found."
         )
     else:
         previous_synthesis_context = "This is the first iteration."
@@ -134,7 +137,7 @@ def _run_iteration(
         "critique_synthesis.md",
         title=title,
         normalized_brief=normalized_brief,
-        research_outputs="\n\n".join(summaries),
+        worker_manifest=build_worker_manifest(iter_dir),
         iteration=str(iteration),
         total_iterations=str(total_iterations),
         previous_synthesis_context=previous_synthesis_context,
@@ -150,29 +153,27 @@ def _run_iteration(
     agent_done(phase, "claude", synthesis.duration_s, label="synthesis", last=True)
     persist_agent_result(iter_dir, "synthesis", synthesis)
     clean_synthesis = sanitize_agent_output(synthesis.stdout)
-    write_text(iter_dir / "synthesis.md", clean_synthesis)
-    return clean_synthesis
+    synthesis_path = iter_dir / "synthesis.md"
+    write_text(synthesis_path, clean_synthesis)
+    return synthesis_path
 
 
 def _run_final_consolidation(
     title: str,
     normalized_brief: str,
-    iteration_syntheses: list[str],
     total_iterations: int,
     adapters: dict[str, object],
     project_root: str,
     base_dir: Path,
 ) -> str:
     """Run a final pass that consolidates all iteration syntheses into one document."""
-    all_syntheses_text = ""
-    for i, synthesis in enumerate(iteration_syntheses, start=1):
-        all_syntheses_text += f"---\n\n# Iteration {i} of {total_iterations}\n\n{synthesis}\n\n"
-
     prompt = render_prompt(
         "critique_final.md",
         title=title,
         normalized_brief=normalized_brief,
-        all_syntheses=all_syntheses_text,
+        syntheses_manifest=build_syntheses_manifest(
+            base_dir / "research", total_iterations
+        ),
         total_iterations=str(total_iterations),
     )
 
@@ -218,30 +219,27 @@ def run_research_loop(
 
     adapters = _build_adapters(config)
 
-    previous_synthesis = ""
-    all_syntheses: list[str] = []
+    previous_synthesis_path: Path | None = None
     for iteration in range(1, iterations + 1):
         log("research-loop", f"Iteration {iteration}/{iterations}")
-        previous_synthesis = _run_iteration(
+        previous_synthesis_path = _run_iteration(
             iteration=iteration,
             total_iterations=iterations,
             title=task.title,
             normalized_brief=normalized.normalized_brief,
-            previous_synthesis=previous_synthesis,
+            previous_synthesis_path=previous_synthesis_path,
             worker_focuses=worker_focuses,
             concurrency=concurrency,
             adapters=adapters,
             project_root=project_root,
             base_dir=base_dir,
         )
-        all_syntheses.append(previous_synthesis)
 
     # Final consolidation pass
     log("research-loop", "Final consolidation...")
     final_output = _run_final_consolidation(
         title=task.title,
         normalized_brief=normalized.normalized_brief,
-        iteration_syntheses=all_syntheses,
         total_iterations=iterations,
         adapters=adapters,
         project_root=project_root,
@@ -277,9 +275,8 @@ def resume_research_loop(
 
     adapters = _build_adapters(config)
 
-    # Load syntheses from completed iterations
-    all_syntheses: list[str] = []
-    previous_synthesis = ""
+    # Load synthesis path from the last completed iteration
+    previous_synthesis_path: Path | None = None
     for i in range(1, start_iteration):
         synth_path = base_dir / "research" / f"iteration-{i:03d}" / "synthesis.md"
         if not synth_path.exists():
@@ -287,34 +284,30 @@ def resume_research_loop(
                 f"Cannot resume from iteration {start_iteration}: "
                 f"iteration {i} synthesis not found at {synth_path}"
             )
-        synthesis_text = read_text(synth_path)
-        all_syntheses.append(synthesis_text)
-        previous_synthesis = synthesis_text
+        previous_synthesis_path = synth_path
         log("research-loop", f"Loaded iteration {i}/{iterations} from disk")
 
     # Run remaining iterations
     for iteration in range(start_iteration, iterations + 1):
         log("research-loop", f"Iteration {iteration}/{iterations}")
-        previous_synthesis = _run_iteration(
+        previous_synthesis_path = _run_iteration(
             iteration=iteration,
             total_iterations=iterations,
             title=task.title,
             normalized_brief=normalized_brief,
-            previous_synthesis=previous_synthesis,
+            previous_synthesis_path=previous_synthesis_path,
             worker_focuses=worker_focuses,
             concurrency=concurrency,
             adapters=adapters,
             project_root=project_root,
             base_dir=base_dir,
         )
-        all_syntheses.append(previous_synthesis)
 
     # Final consolidation pass
     log("research-loop", "Final consolidation...")
     final_output = _run_final_consolidation(
         title=task.title,
         normalized_brief=normalized_brief,
-        iteration_syntheses=all_syntheses,
         total_iterations=iterations,
         adapters=adapters,
         project_root=project_root,

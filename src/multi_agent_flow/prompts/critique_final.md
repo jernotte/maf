@@ -4,9 +4,13 @@ The original brief:
 
 {normalized_brief}
 
-Below are the synthesis documents from each iteration. Each built on the previous one, going progressively deeper.
+{syntheses_manifest}
 
-{all_syntheses}
+Strategy:
+- Read ALL iteration syntheses using the Read tool, starting from iteration 1
+- Process each synthesis before reading the next — track how findings evolved across iterations
+- Later iterations built on earlier ones but earlier iterations may contain unique findings later dropped
+- Use Grep to search for specific themes across all syntheses when needed
 
 Produce a single, definitive critique document with these sections:
 

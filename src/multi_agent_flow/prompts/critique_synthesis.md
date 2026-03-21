@@ -6,9 +6,14 @@ Use the normalized brief below:
 
 {previous_synthesis_context}
 
-You have new research-critique outputs from parallel workers:
+{worker_manifest}
 
-{research_outputs}
+Strategy:
+- Read ALL worker findings files using the Read tool, one at a time
+- Process each worker's output before reading the next — note key findings, contradictions, and themes as you go
+- For very large individual files, use Grep to locate specific sections before reading in full
+- Resolve conflicts where possible and clearly flag unresolved disagreements
+- If this iteration found nothing new, say so explicitly
 
 Produce a single synthesis document with these sections:
 - Executive Summary (what this iteration found that prior iterations did not)
