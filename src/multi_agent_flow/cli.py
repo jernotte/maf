@@ -31,7 +31,12 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument(
         "--scaffolds-only",
         action="store_true",
-        help="Only write scaffolds (.claude/, .codex/, .gemini/), skip .maf.yml. Useful for adding new scaffolds to an existing project.",
+        help="Only write NEW scaffold files (.claude/, .codex/, .gemini/), skip .maf.yml. Existing files are NOT overwritten.",
+    )
+    init_parser.add_argument(
+        "--update-scaffolds",
+        action="store_true",
+        help="Force-update all scaffold files to latest versions, skip .maf.yml. Overwrites existing scaffolds.",
     )
 
     research = subparsers.add_parser("research", help="Create a task and run research.")
@@ -170,8 +175,14 @@ def _init_config(
     force: bool,
     skip_scaffolds: bool = False,
     scaffolds_only: bool = False,
+    update_scaffolds: bool = False,
 ) -> list[Path]:
     written: list[Path] = []
+
+    if update_scaffolds:
+        # Force-update all scaffolds to latest versions, skip .maf.yml.
+        written.extend(_write_all_scaffolds(project_root, force=True))
+        return written
 
     if scaffolds_only:
         # Only write scaffolds, skip .maf.yml entirely.
@@ -208,7 +219,10 @@ def main(argv: list[str] | None = None) -> int:
     project_root = Path(args.project_root).resolve()
 
     if args.command == "init":
-        written = _init_config(project_root, args.force, args.skip_scaffolds, args.scaffolds_only)
+        written = _init_config(
+            project_root, args.force, args.skip_scaffolds,
+            args.scaffolds_only, args.update_scaffolds,
+        )
         for path in written:
             print(path)
         return 0

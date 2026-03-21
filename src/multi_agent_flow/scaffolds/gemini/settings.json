@@ -1,5 +1,8 @@
 {
   "tools": {
-    "run_shell_command": true
+    "google_search": true,
+    "run_shell_command": true,
+    "read_file": true,
+    "list_directory": true
   }
 }
