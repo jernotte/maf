@@ -111,36 +111,17 @@ def _load_validation_profiles(raw: dict | None) -> dict[str, ValidationProfile]:
     return profiles
 
 
-def _find_config_file(start: Path) -> Path | None:
-    """Search start and its ancestors for .maf.yml, stopping at filesystem or home boundary."""
-    current = start.resolve()
-    home = Path.home().resolve()
-    while True:
-        candidate = current / ".maf.yml"
-        if candidate.exists():
-            return candidate
-        # Stop at home directory — don't search above it
-        if current == home:
-            return None
-        parent = current.parent
-        # Stop at filesystem root
-        if parent == current:
-            return None
-        current = parent
-
-
 def load_project_config(project_root: str | Path) -> tuple[AppConfig, Path]:
     """Load config and return (config, resolved_project_root).
 
-    If .maf.yml is not in project_root directly, walks up to find it.
-    The returned root is the directory containing .maf.yml, so that
-    config and artifacts (.maf/tasks/) stay co-located.
+    Looks for .maf.yml in the given project_root only — does not walk
+    up the directory tree. If not found, returns default config.
+    Use --project-root to point at the right directory.
     """
     root = Path(project_root).resolve()
-    config_path = _find_config_file(root)
-    if config_path is not None:
+    config_path = root / ".maf.yml"
+    if config_path.exists():
         data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        root = config_path.parent  # use the directory where .maf.yml lives
     else:
         data = {}
 
