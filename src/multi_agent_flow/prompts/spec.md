@@ -22,3 +22,4 @@ Return Markdown with exactly these top-level sections:
 
 Make it specific enough that another agent can implement against it and another agent can review compliance against it.
 
+Output the complete spec directly as text. Do NOT use the Write tool to create files.
