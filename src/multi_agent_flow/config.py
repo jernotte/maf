@@ -111,19 +111,28 @@ def _load_validation_profiles(raw: dict | None) -> dict[str, ValidationProfile]:
     return profiles
 
 
-def load_project_config(project_root: str | Path) -> tuple[AppConfig, Path]:
+def load_project_config(
+    project_root: str | Path,
+    config_file: str | Path | None = None,
+) -> tuple[AppConfig, Path]:
     """Load config and return (config, resolved_project_root).
 
-    Looks for .maf.yml in the given project_root only — does not walk
-    up the directory tree. If not found, returns default config.
-    Use --project-root to point at the right directory.
+    If config_file is given, loads from that path explicitly.
+    Otherwise looks for .maf.yml in project_root.
+    If not found, returns default config.
     """
     root = Path(project_root).resolve()
-    config_path = root / ".maf.yml"
-    if config_path.exists():
+    if config_file is not None:
+        config_path = Path(config_file).resolve()
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
         data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     else:
-        data = {}
+        config_path = root / ".maf.yml"
+        if config_path.exists():
+            data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        else:
+            data = {}
 
     research_data = data.get("research", {})
     research = ResearchConfig(

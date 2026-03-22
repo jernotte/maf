@@ -19,6 +19,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Target project root for config, artifacts, and command execution.",
     )
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="Path to .maf.yml config file. Defaults to <project-root>/.maf.yml.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser("init", help="Write a sample .maf.yml and agent scaffolds into the target project.")
@@ -227,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
             print(path)
         return 0
 
-    config, resolved_root = load_project_config(project_root)
+    config, resolved_root = load_project_config(project_root, args.config)
     project_root = resolved_root
 
     if args.command == "research":
