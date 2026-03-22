@@ -111,11 +111,36 @@ def _load_validation_profiles(raw: dict | None) -> dict[str, ValidationProfile]:
     return profiles
 
 
-def load_project_config(project_root: str | Path) -> AppConfig:
+def _find_config_file(start: Path) -> Path | None:
+    """Search start and its ancestors for .maf.yml, stopping at filesystem or home boundary."""
+    current = start.resolve()
+    home = Path.home().resolve()
+    while True:
+        candidate = current / ".maf.yml"
+        if candidate.exists():
+            return candidate
+        # Stop at home directory — don't search above it
+        if current == home:
+            return None
+        parent = current.parent
+        # Stop at filesystem root
+        if parent == current:
+            return None
+        current = parent
+
+
+def load_project_config(project_root: str | Path) -> tuple[AppConfig, Path]:
+    """Load config and return (config, resolved_project_root).
+
+    If .maf.yml is not in project_root directly, walks up to find it.
+    The returned root is the directory containing .maf.yml, so that
+    config and artifacts (.maf/tasks/) stay co-located.
+    """
     root = Path(project_root).resolve()
-    config_path = root / ".maf.yml"
-    if config_path.exists():
+    config_path = _find_config_file(root)
+    if config_path is not None:
         data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        root = config_path.parent  # use the directory where .maf.yml lives
     else:
         data = {}
 
@@ -149,7 +174,7 @@ def load_project_config(project_root: str | Path) -> AppConfig:
         iterations=int(deep_research_data.get("iterations", 3)),
     )
 
-    return AppConfig(
+    config = AppConfig(
         maf_dir=str(data.get("maf_dir", ".maf")),
         default_validation_profile=data.get("default_validation_profile"),
         agents=_load_agent_configs(data.get("agents")),
@@ -157,4 +182,5 @@ def load_project_config(project_root: str | Path) -> AppConfig:
         deep_research=deep_research,
         validation_profiles=_load_validation_profiles(data.get("validation_profiles")),
     )
+    return config, root
 

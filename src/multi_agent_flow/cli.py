@@ -227,7 +227,8 @@ def main(argv: list[str] | None = None) -> int:
             print(path)
         return 0
 
-    config = load_project_config(project_root)
+    config, resolved_root = load_project_config(project_root)
+    project_root = resolved_root
 
     if args.command == "research":
         task_id = run_research(
